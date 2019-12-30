@@ -1,0 +1,26 @@
+name: CI
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+      
+    - name: Validate composer.json and composer.lock
+      run: composer validate
+
+    - name: Install dependencies
+      run: composer install --prefer-dist --no-progress --no-suggest
+
+    - name: lint the code
+      run: vendor/bin/parallel-lint --exclude vendor/ .
+
+    - name: check the code formating
+      run: vendor/bin/phpcs
+      
+    - name: do unit testing
+      run: vendor/bin/phpunit 
