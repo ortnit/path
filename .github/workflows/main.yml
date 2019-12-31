@@ -9,6 +9,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
+
+    - name: Installing PHP
+      uses: shivammathur/setup-php@master
       
     - name: Validate composer.json and composer.lock
       run: composer validate
