@@ -12,6 +12,9 @@ jobs:
 
     - name: Installing PHP
       uses: shivammathur/setup-php@master
+      with:
+        php-version: 7.4
+        extension-csv: mbstring, xdebug
       
     - name: Validate composer.json and composer.lock
       run: composer validate
