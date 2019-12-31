@@ -5,26 +5,75 @@ namespace Ortnit\Path;
 class Path
 {
     /**
-     * @param $path
-     * @return null
+     * list of strings which will be filtered by sanitize function
+     *
+     * @var array
      */
-    public static function getExtension($path)
+    protected static array $forbiddenParts = [
+        '',
+        '.',
+        '..',
+    ];
+
+    /**
+     * @param string $path
+     * @return array|null
+     */
+    public static function splitPath(string $path): ?array
     {
-        list($extension, $name) = array_map('strrev', explode('.', strrev($path), 2));
-        //var_dump('-----', $path, $name, $extension);
-        if (empty($name)) {
-            return null;
-        }
-        return $extension;
+        $parts = explode(DIRECTORY_SEPARATOR, $path);
+
+        return ($parts === false) ? null : $parts;
     }
 
     /**
-     * @return null|string
+     * return if a function is absolute path which is not dependent from its working directory
+     *
+     * @param string $path
+     * @return bool
      */
-    public static function joinPath()
+    public static function isAbsolutePath(string $path): bool
     {
+        return (substr($path, 0, 1) == DIRECTORY_SEPARATOR);
+    }
+
+    public static function sanitizeParts(array $parts)
+    {
+        $sanitizedParts = [];
+
+        foreach ($parts as $part) {
+            if (static::filterForbiddenPart($part)) {
+                continue;
+            }
+
+            $sanitizedParts[] = $part;
+        }
+
+        return $sanitizedParts;
+    }
+
+    /**
+     * check if a part is allowed or should be filtered
+     * if forbidden function gives back true
+     *
+     * @param $part
+     * @return bool
+     */
+    public static function filterForbiddenPart($part)
+    {
+        return (array_search($part, static::$forbiddenParts) !== false);
+    }
+
+    /**
+     * @param array $args
+     * @return string|null
+     */
+    public static function joinPath(...$args)
+    {
+        dump($args);
+
+
         $delimiter = '/';
-        $args = func_get_args();
         $parts = [];
         foreach ($args as $arg) {
             if (is_array($arg)) {
@@ -49,6 +98,22 @@ class Path
         $path = ($leading ? $delimiter : '') . implode($delimiter, $parts);
         return $path;
     }
+
+
+    /**
+     * @param $path
+     * @return null
+     */
+    public static function getExtension($path)
+    {
+        list($extension, $name) = array_map('strrev', explode('.', strrev($path), 2));
+        //var_dump('-----', $path, $name, $extension);
+        if (empty($name)) {
+            return null;
+        }
+        return $extension;
+    }
+
 
     /**
      * @param $source
