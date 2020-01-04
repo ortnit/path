@@ -2,6 +2,9 @@
 
 namespace Ortnit\Path;
 
+use Exception;
+use Generator;
+
 class Path
 {
     /**
@@ -37,7 +40,13 @@ class Path
         return (substr($path, 0, 1) == DIRECTORY_SEPARATOR);
     }
 
-    public static function sanitizeParts(array $parts)
+    /**
+     * filters parts which should not be part of an url
+     *
+     * @param String[] $parts
+     * @return array
+     */
+    public static function sanitizeParts(array $parts): array
     {
         $sanitizedParts = [];
 
@@ -65,15 +74,15 @@ class Path
     }
 
     /**
-     * @param array $args
+     * @param String[] $args
      * @return string|null
      */
     public static function joinPath(...$args)
     {
-        dump($args);
+        //dump($args);
 
 
-        $delimiter = '/';
+        $delimiter = DIRECTORY_SEPARATOR;
         $parts = [];
         foreach ($args as $arg) {
             if (is_array($arg)) {
@@ -99,19 +108,22 @@ class Path
         return $path;
     }
 
-
     /**
-     * @param $path
-     * @return null
+     * gets the file extension from every file path if available other wise return null
+     *
+     * @param string $path
+     * @return string|null
      */
-    public static function getExtension($path)
+    public static function getFileExtension(string $path): ?string
     {
-        list($extension, $name) = array_map('strrev', explode('.', strrev($path), 2));
-        //var_dump('-----', $path, $name, $extension);
-        if (empty($name)) {
+        $filename = basename($path);
+
+        $position = strrpos($filename, '.');
+        if ($position === 0 || $position === false || strlen($filename) <= $position + 1) {
             return null;
         }
-        return $extension;
+
+        return substr($filename, $position + 1);
     }
 
 
@@ -119,12 +131,12 @@ class Path
      * @param $source
      * @param $destination
      * @param null $mode
-     * @throws \Exception
+     * @throws Exception
      */
     public static function copyDirectory($source, $destination, $mode = null)
     {
         if (!is_dir($source)) {
-            throw new \Exception('source "' . $source . '" does not exist');
+            throw new Exception('source "' . $source . '" does not exist');
         }
         if (!is_dir($destination)) {
             mkdir($destination, 0777, true);
@@ -142,14 +154,14 @@ class Path
             if (filetype($sourcePath) == 'dir') {
                 if (!is_dir($destinationPath)) {
                     if (!mkdir($destinationPath)) {
-                        throw new \Exception('cannot create directory ' . $destinationPath);
+                        throw new Exception('cannot create directory ' . $destinationPath);
                     }
                 }
                 self::copyDirectory($sourcePath, $destinationPath, $mode);
             } else {
                 //echo "copy: " . $sourcePath . " => " . $destinationPath . "\n";
                 if (!copy($sourcePath, $destinationPath)) {
-                    throw new \Exception("cannot copy " . $sourcePath . " to " . $destinationPath);
+                    throw new Exception("cannot copy " . $sourcePath . " to " . $destinationPath);
                 }
                 if ($mode != null) {
                     chmod($destinationPath, $mode);
@@ -162,7 +174,7 @@ class Path
      * @param $dir
      * @return bool
      */
-    public static function removeDirectory($dir)
+    public static function removeDirectory(string $dir): bool
     {
         if (is_dir($dir)) {
             $objects = scandir($dir);
@@ -180,24 +192,50 @@ class Path
         return false;
     }
 
-    public static function pathSize($path)
+    /**
+     * cycles through a path, can be used in a foreach with its generator
+     *
+     * @param string $path
+     * @return Generator
+     */
+    public static function cycle(string $path): Generator
     {
-        $sum = 0;
         if (is_dir($path)) {
+            yield $path;
+
             $objects = scandir($path);
             foreach ($objects as $object) {
-                if ($object != "." && $object != "..") {
-                    $tmpPath = self::joinPath($path, $object);
-                    if (is_dir($tmpPath)) {
-                        $sum += self::pathSize($tmpPath);
-                    } elseif (is_file($tmpPath)) {
-                        $size = filesize($tmpPath);
-                        //echo $tmpPath . ": " . $size . "\n";
-                        $sum += $size;
+                if ($object == "." || $object == "..") {
+                    continue;
+                }
+
+                $newPath = static::joinPath($path, $object);
+                if (is_dir($newPath)) {
+                    foreach (static::cycle($newPath) as $filePath) {
+                        yield $filePath;
                     }
+                } elseif (is_file($newPath)) {
+                    yield $newPath;
                 }
             }
         }
+    }
+
+    /**
+     * get the size of a full folder, returns a int in bytes
+     *
+     * @param string $path
+     * @return int
+     */
+    public static function pathSize(string $path): int
+    {
+        $sum = 0;
+        foreach (Path::cycle($path) as $filePath) {
+            if (is_file($filePath)) {
+                $sum += filesize($filePath);
+            }
+        }
+
         return $sum;
     }
 }
