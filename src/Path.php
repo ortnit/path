@@ -4,9 +4,15 @@ namespace Ortnit\Path;
 
 use Exception;
 use Generator;
+use InvalidArgumentException;
 
 class Path
 {
+    /**
+     * separates the parts of a path
+     */
+    const DELIMITER = DIRECTORY_SEPARATOR;
+
     /**
      * list of strings which will be filtered by sanitize function
      *
@@ -24,7 +30,7 @@ class Path
      */
     public static function splitPath(string $path): ?array
     {
-        $parts = explode(DIRECTORY_SEPARATOR, $path);
+        $parts = explode(static::DELIMITER, $path);
 
         return ($parts === false) ? null : $parts;
     }
@@ -37,7 +43,7 @@ class Path
      */
     public static function isAbsolutePath(string $path): bool
     {
-        return (substr($path, 0, 1) == DIRECTORY_SEPARATOR);
+        return (substr($path, 0, 1) == static::DELIMITER);
     }
 
     /**
@@ -74,38 +80,61 @@ class Path
     }
 
     /**
-     * @param String[] $args
+     * @param String[] $parts
      * @return string|null
      */
-    public static function joinPath(...$args)
+    public static function joinPath(...$parts)
     {
-        //dump($args);
-
-
-        $delimiter = DIRECTORY_SEPARATOR;
-        $parts = [];
-        foreach ($args as $arg) {
-            if (is_array($arg)) {
-                $parts = array_merge($parts, $arg);
-            } else {
-                $parts[] = $arg;
-            }
-        }
-
         if (empty($parts)) {
             return null;
         }
 
-        $leading = false;
-        if (substr($parts[0], 0, 1) == $delimiter) {
-            $leading = true;
-        }
-        foreach ($parts as $key => $part) {
-            $parts[$key] = trim($part, $delimiter);
+        foreach ($parts as $part) {
+            if (!is_string($part)) {
+                throw new InvalidArgumentException('arguments have to be string');
+            }
         }
 
-        $path = ($leading ? $delimiter : '') . implode($delimiter, $parts);
-        return $path;
+        $isRoot = static::isRoot($parts[0]);
+
+        $parts = static::cleanParts($parts);
+
+        if ($isRoot) {
+            array_unshift($parts, '');
+        }
+
+        return implode(static::DELIMITER, $parts);
+    }
+
+    /**
+     * clean parts, remove forbidden characters
+     *
+     * @param array $parts
+     * @return array
+     */
+    public static function cleanParts(array $parts): array
+    {
+        foreach ($parts as $key => $part) {
+            $parts[$key] = trim($part, static::DELIMITER . ' ');
+        }
+
+        return $parts;
+    }
+
+    /**
+     * checks for a leading "/" in the path
+     *
+     * @param string $path
+     * @return bool
+     */
+    public static function isRoot(string $path): bool
+    {
+        $isRoot = false;
+        if (substr($path, 0, 1) == static::DELIMITER) {
+            $isRoot = true;
+        }
+
+        return $isRoot;
     }
 
     /**
@@ -138,9 +167,8 @@ class Path
         if (!is_dir($source)) {
             throw new Exception('source "' . $source . '" does not exist');
         }
-        if (!is_dir($destination)) {
-            mkdir($destination, 0777, true);
-            //throw new \Exception('destination "' . $destination . '" does not exist');
+        if (!is_dir($destination) && !mkdir($destination, 0777, true)) {
+            throw new Exception('destination "' . $destination . '" does not exist');
         }
 
         $dir = opendir($source);
@@ -171,24 +199,29 @@ class Path
     }
 
     /**
-     * @param $dir
+     * remove directory and content from file system
+     *
+     * @param string $dir
      * @return bool
+     * @throws Exception
      */
     public static function removeDirectory(string $dir): bool
     {
         if (is_dir($dir)) {
-            $objects = scandir($dir);
-            foreach ($objects as $object) {
-                if ($object != "." && $object != "..") {
-                    if (is_dir($dir . "/" . $object)) {
-                        self::removeDirectory(self::joinPath($dir, $object));
-                    } else {
-                        unlink($dir . "/" . $object);
+            foreach (Path::cycle($dir, false) as $path) {
+                if (is_dir($path)) {
+                    self::removeDirectory($path);
+                } else {
+                    if (!unlink($path)) {
+                        throw new Exception('cannot delete file ' . $path);
                     }
                 }
             }
-            return rmdir($dir);
+            if (!rmdir($dir)) {
+                throw new Exception('cannot delete directory ' . $dir);
+            }
         }
+
         return false;
     }
 
@@ -196,13 +229,12 @@ class Path
      * cycles through a path, can be used in a foreach with its generator
      *
      * @param string $path
+     * @param bool $recursive
      * @return Generator
      */
-    public static function cycle(string $path): Generator
+    public static function cycle(string $path, bool $recursive = true): Generator
     {
         if (is_dir($path)) {
-            yield $path;
-
             $objects = scandir($path);
             foreach ($objects as $object) {
                 if ($object == "." || $object == "..") {
@@ -210,12 +242,13 @@ class Path
                 }
 
                 $newPath = static::joinPath($path, $object);
-                if (is_dir($newPath)) {
+
+                yield $newPath;
+
+                if (is_dir($newPath) && $recursive) {
                     foreach (static::cycle($newPath) as $filePath) {
                         yield $filePath;
                     }
-                } elseif (is_file($newPath)) {
-                    yield $newPath;
                 }
             }
         }

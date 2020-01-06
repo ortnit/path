@@ -2,6 +2,8 @@
 
 namespace Ortnit\Test;
 
+use Exception;
+use InvalidArgumentException;
 use Ortnit\Path\Path;
 use PHPUnit\Framework\TestCase;
 
@@ -9,18 +11,40 @@ final class PathTest extends TestCase
 {
     protected int $fileCount = 0;
 
-    public function testCanJoinPaths(): void
+    /** @test */
+    public function canJoinPaths(): void
     {
-        $path = Path::joinPath('test', 'test123', 'text.txt');
-        dump($path);
-        $this->assertIsBool(true);
+        $path = Path::joinPath('/test', 'test123', 'text.txt');
+        $this->assertEquals('/test/test123/text.txt', $path);
+    }
+
+    /** @test */
+    public function canJoinArrayParts(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        Path::joinPath(['test', 'test123', 'text.txt']);
+    }
+
+    /** @test */
+    public function canJoinEmptyPath()
+    {
+        $this->assertNull(Path::joinPath());
+    }
+
+    /** @test */
+    public function canCleanParts()
+    {
+        $parts = Path::cleanParts(['/test', ' test123', 'text.txt ']);
+
+        $this->assertEquals('test', $parts[0]);
+        $this->assertEquals('test123', $parts[1]);
+        $this->assertEquals('text.txt', $parts[2]);
     }
 
     /** @test */
     public function canSplitPath()
     {
         $parts = Path::splitPath('/etc/resolv.conf');
-        dump($parts);
 
         $this->assertIsArray($parts);
     }
@@ -72,13 +96,13 @@ final class PathTest extends TestCase
 
         $count = 0;
         foreach (Path::cycle($path) as $filePath) {
-            echo $filePath . PHP_EOL;
+            $this->assertIsBool(file_exists($filePath));
             $count++;
         }
 
         $fileCount = intval(exec('find ' . $path . '| wc -l'));
 
-        $this->assertEquals($fileCount, $count);
+        $this->assertEquals($fileCount - 1, $count);
     }
 
     /** @test */
@@ -103,5 +127,55 @@ final class PathTest extends TestCase
         $this->assertNull(Path::getFileExtension('~/.bashrc'));
         $this->assertNull(Path::getFileExtension('.profile'));
         $this->assertNull(Path::getFileExtension('/etc/hostname'));
+    }
+
+    public function createTestDir()
+    {
+        chdir('/tmp');
+        mkdir('test_dir');
+
+        mkdir('test_dir/1');
+        touch('test_dir/1/1');
+        touch('test_dir/1/2');
+        touch('test_dir/1/3');
+
+        mkdir('test_dir/2');
+        touch('test_dir/2/1');
+        touch('test_dir/2/2');
+        touch('test_dir/2/3');
+    }
+
+    /** @test
+     * @throws Exception
+     */
+    public function canRemoveDir()
+    {
+        $path = '/tmp/test_dir';
+
+        $this->createTestDir();
+
+        Path::removeDirectory($path);
+
+        $this->assertFalse(is_dir($path));
+    }
+
+    /** @test
+     * @throws Exception
+     */
+    public function canCopyDir()
+    {
+        $path = '/tmp/test_dir';
+        $copyPath = '/tmp/copy_dir';
+
+        $this->createTestDir();
+
+        Path::copyDirectory($path, $copyPath);
+        $this->assertTrue(is_dir($copyPath));
+
+        Path::removeDirectory($path);
+        $this->assertFalse(is_dir($path));
+
+        Path::removeDirectory($copyPath);
+        $this->assertFalse(is_dir($copyPath));
     }
 }
